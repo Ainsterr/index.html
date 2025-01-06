@@ -3,60 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Localização em Tempo Real</title>
+    <title>Localização Avançada em Tempo Real</title>
 
     <!-- Incluir Leaflet CSS e JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 
+    <!-- Estilos personalizados -->
     <style>
         body {
             font-family: Arial, sans-serif;
-            text-align: center;
-            margin-top: 50px;
             background-color: #f4f4f4;
+            text-align: center;
+            margin-top: 20px;
+            color: #333;
         }
         .container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+            max-width: 900px;
+            margin: auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0px 2px 12px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #4CAF50;
+            font-size: 36px;
+            margin-bottom: 20px;
         }
         .button {
             background-color: #4CAF50;
             color: white;
-            padding: 10px 20px;
+            padding: 12px 24px;
             border: none;
-            cursor: pointer;
             font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
             margin-bottom: 20px;
-            border-radius: 5px;
         }
-        .result {
-            margin-top: 20px;
-            font-size: 18px;
+        .button:hover {
+            background-color: #45a049;
         }
         #map {
             width: 100%;
             height: 400px;
             margin-top: 20px;
+            border-radius: 8px;
+        }
+        .loading {
+            font-size: 18px;
+            color: #f39c12;
+        }
+        .result {
+            font-size: 18px;
+            margin-top: 20px;
         }
         .error {
             color: red;
+        }
+        .progress-bar {
+            width: 80%;
+            height: 5px;
+            background-color: #ddd;
+            margin: 20px auto;
+            border-radius: 3px;
+        }
+        .progress-bar .progress {
+            width: 0%;
+            height: 100%;
+            background-color: #4CAF50;
+            border-radius: 3px;
+            transition: width 0.5s ease-in-out;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Obter Localização Atual</h1>
+        <h1>Obter Localização Atual Avançada</h1>
         <button class="button" onclick="getLocation()">Obter Localização</button>
-        <div class="result" id="result"></div>
+        <div id="result" class="result"></div>
         <div id="map"></div>
+        <div class="progress-bar">
+            <div id="progress" class="progress"></div>
+        </div>
     </div>
 
     <script>
         // Inicialização do mapa Leaflet
-        var map = L.map('map').setView([0, 0], 13); // Posição inicial
+        var map = L.map('map').setView([0, 0], 13); // Posição inicial (0,0)
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
@@ -64,56 +98,74 @@
         var marker;
 
         function getLocation() {
+            // Exibindo a barra de progresso
+            document.getElementById("progress").style.width = "50%";
+            document.getElementById("result").innerHTML = "<div class='loading'>Obtendo localização...</div>";
+
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(showPosition, showError);
+                navigator.geolocation.getCurrentPosition(showPosition, showError, {
+                    enableHighAccuracy: true, // Maior precisão possível
+                    timeout: 10000, // Tempo máximo de espera
+                    maximumAge: 0 // Não usar informações antigas de localização
+                });
             } else {
-                document.getElementById("result").innerHTML = "Geolocalização não é suportada pelo seu navegador.";
+                document.getElementById("result").innerHTML = "<div class='error'>Geolocalização não é suportada pelo seu navegador.</div>";
             }
         }
 
         function showPosition(position) {
+            // Atualiza a largura da barra de progresso
+            document.getElementById("progress").style.width = "100%";
+
             var lat = position.coords.latitude;
             var lon = position.coords.longitude;
+            var accuracy = position.coords.accuracy; // Precisão da localização (em metros)
 
-            // Atualizando a posição do marcador no mapa
+            // Exibe a precisão e outras informações
+            document.getElementById("result").innerHTML = `
+                <strong>Latitude:</strong> ${lat}<br>
+                <strong>Longitude:</strong> ${lon}<br>
+                <strong>Precisão:</strong> ${accuracy} metros
+            `;
+
+            // Atualiza o mapa e o marcador
             if (marker) {
                 map.removeLayer(marker); // Remove marcador antigo
             }
-
             marker = L.marker([lat, lon]).addTo(map);
-            map.setView([lat, lon], 13); // Ajusta o zoom e posição do mapa
+            map.setView([lat, lon], 13); // Ajusta o zoom
 
-            // Exibindo informações de localização
-            document.getElementById("result").innerHTML = "Latitude: " + lat + "<br>Longitude: " + lon;
-
-            // Enviando para a API de Geocodificação
+            // Exibe o endereço completo usando a geocodificação do OpenStreetMap
             fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.display_name) {
-                        document.getElementById("result").innerHTML += "<br>Endereço: " + data.display_name;
+                        document.getElementById("result").innerHTML += `<br><strong>Endereço:</strong> ${data.display_name}`;
                     } else {
-                        document.getElementById("result").innerHTML += "<br>Não foi possível encontrar o endereço.";
+                        document.getElementById("result").innerHTML += "<br><strong>Erro:</strong> Não foi possível encontrar o endereço.";
                     }
                 })
                 .catch(error => {
-                    document.getElementById("result").innerHTML += "<br>Erro ao conectar com o serviço de geocodificação.";
+                    document.getElementById("result").innerHTML += "<br><strong>Erro:</strong> Falha ao obter endereço.";
                 });
         }
 
         function showError(error) {
+            // Remove a barra de progresso
+            document.getElementById("progress").style.width = "0%";
+
             switch(error.code) {
                 case error.PERMISSION_DENIED:
-                    document.getElementById("result").innerHTML = "Usuário rejeitou a solicitação de Geolocalização.";
+                    document.getElementById("result").innerHTML = "<div class='error'>Usuário rejeitou a solicitação de Geolocalização.</div>";
                     break;
                 case error.POSITION_UNAVAILABLE:
-                    document.getElementById("result").innerHTML = "Informações de localização não disponíveis.";
+                    document.getElementById("result").innerHTML = "<div class='error'>Informações de localização não disponíveis.</div>";
                     break;
                 case error.TIMEOUT:
-                    document.getElementById("result").innerHTML = "A solicitação de Geolocalização expirou.";
+                    document.getElementById("result").innerHTML = "<div class='error'>A solicitação de Geolocalização expirou.</div>";
                     break;
                 case error.UNKNOWN_ERROR:
-                    document.getElementById("result").innerHTML = "Erro desconhecido.";
+                    document.getElementById("result").innerHTML = "<div class='error'>Erro desconhecido ao tentar obter localização.</div>";
                     break;
             }
         }
