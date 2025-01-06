@@ -132,10 +132,7 @@
         <div id="result" class="loading" style="display:none;">Obtendo localização...</div>
         <div id="map"></div>
         <div id="info-box" class="info-box" style="display:none;">
-            <p><span>Latitude:</span> <span id="latitude"></span></p>
-            <p><span>Longitude:</span> <span id="longitude"></span></p>
-            <p><span>Precisão:</span> <span id="accuracy"></span></p>
-            <p><span>Endereço:</span> <span id="address"></span></p>
+            <p><span>Endereço:</span> <span id="address">Aguardando localização...</span></p>
         </div>
     </div>
 
@@ -167,7 +164,6 @@
         function updatePosition(position) {
             var lat = position.coords.latitude;
             var lon = position.coords.longitude;
-            var accuracy = position.coords.accuracy;
 
             // Atualiza o mapa e o marcador
             if (marker) {
@@ -177,11 +173,6 @@
             }
             map.setView([lat, lon], 13);
 
-            // Atualiza as informações no painel
-            document.getElementById('latitude').innerText = lat;
-            document.getElementById('longitude').innerText = lon;
-            document.getElementById('accuracy').innerText = accuracy + ' metros';
-
             // Requisição para obter o endereço
             fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
                 .then(response => response.json())
@@ -189,7 +180,7 @@
                     if (data.display_name) {
                         document.getElementById('address').innerText = data.display_name;
                     } else {
-                        document.getElementById('address').innerText = 'Não disponível';
+                        document.getElementById('address').innerText = 'Endereço não disponível';
                     }
                 })
                 .catch(error => {
