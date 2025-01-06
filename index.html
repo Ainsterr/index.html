@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Localização Avançada</title>
+    <title>Localização Atualizada</title>
 
     <!-- Incluir Leaflet CSS e JS para o Mapa -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
@@ -126,9 +126,6 @@
         <div id="result" class="loading" style="display:none;">Obtendo localização...</div>
         <div id="map"></div>
         <div id="info-box" class="info-box" style="display:none;">
-            <p><span>Latitude:</span> <span id="latitude"></span></p>
-            <p><span>Longitude:</span> <span id="longitude"></span></p>
-            <p><span>Precisão:</span> <span id="accuracy"></span></p>
             <p><span>Endereço:</span> <span id="address"></span></p>
         </div>
     </div>
@@ -161,7 +158,6 @@
         function updatePosition(position) {
             var lat = position.coords.latitude;
             var lon = position.coords.longitude;
-            var accuracy = position.coords.accuracy;
 
             // Atualiza o mapa e o marcador
             if (marker) {
@@ -170,11 +166,6 @@
                 marker = L.marker([lat, lon]).addTo(map);
             }
             map.setView([lat, lon], 13);
-
-            // Atualiza as informações no painel
-            document.getElementById('latitude').innerText = lat;
-            document.getElementById('longitude').innerText = lon;
-            document.getElementById('accuracy').innerText = accuracy + ' metros';
 
             // Requisição para obter o endereço
             fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
@@ -190,7 +181,7 @@
                     document.getElementById('address').innerText = 'Erro ao obter endereço';
                 });
 
-            // Exibe as informações
+            // Exibe as informações do endereço
             document.getElementById('info-box').style.display = 'block';
             document.getElementById('result').style.display = 'none';
         }
