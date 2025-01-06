@@ -4,11 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Localização em Tempo Real</title>
+
+    <!-- Incluir Leaflet CSS e JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
     <style>
         body {
             font-family: Arial, sans-serif;
             text-align: center;
             margin-top: 50px;
+            background-color: #f4f4f4;
         }
         .container {
             display: flex;
@@ -23,9 +29,20 @@
             border: none;
             cursor: pointer;
             font-size: 16px;
+            margin-bottom: 20px;
+            border-radius: 5px;
         }
         .result {
             margin-top: 20px;
+            font-size: 18px;
+        }
+        #map {
+            width: 100%;
+            height: 400px;
+            margin-top: 20px;
+        }
+        .error {
+            color: red;
         }
     </style>
 </head>
@@ -34,9 +51,18 @@
         <h1>Obter Localização Atual</h1>
         <button class="button" onclick="getLocation()">Obter Localização</button>
         <div class="result" id="result"></div>
+        <div id="map"></div>
     </div>
 
     <script>
+        // Inicialização do mapa Leaflet
+        var map = L.map('map').setView([0, 0], 13); // Posição inicial
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        var marker;
+
         function getLocation() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(showPosition, showError);
@@ -48,11 +74,19 @@
         function showPosition(position) {
             var lat = position.coords.latitude;
             var lon = position.coords.longitude;
-            
-            // Exibindo latitude e longitude
+
+            // Atualizando a posição do marcador no mapa
+            if (marker) {
+                map.removeLayer(marker); // Remove marcador antigo
+            }
+
+            marker = L.marker([lat, lon]).addTo(map);
+            map.setView([lat, lon], 13); // Ajusta o zoom e posição do mapa
+
+            // Exibindo informações de localização
             document.getElementById("result").innerHTML = "Latitude: " + lat + "<br>Longitude: " + lon;
 
-            // Enviando para a API de Geocodificação (OpenStreetMap Nominatim)
+            // Enviando para a API de Geocodificação
             fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
                 .then(response => response.json())
                 .then(data => {
