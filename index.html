@@ -3,17 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Localização Premium</title>
+    <title>Localização Avançada</title>
 
     <!-- Incluir Leaflet CSS e JS para o Mapa -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 
-    <!-- Fontes do Google Fonts para uma interface mais sofisticada -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Font Awesome para ícones modernos -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+    <!-- Fontes do Google Fonts para uma interface mais moderna -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 
     <!-- Estilos Personalizados -->
     <style>
@@ -23,116 +20,93 @@
             padding: 0;
         }
         body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #f4f7f6;
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f7fa;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
-            padding: 30px;
+            padding: 20px;
+            color: #333;
         }
         .container {
             width: 100%;
-            max-width: 950px;
-            background-color: #ffffff;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 10px 50px rgba(0, 0, 0, 0.1);
+            max-width: 900px;
+            background-color: #fff;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
             text-align: center;
-            transition: all 0.3s ease;
+            overflow: hidden;
         }
         h1 {
-            font-size: 42px;
-            color: #333333;
-            margin-bottom: 40px;
-            font-weight: 700;
+            font-size: 32px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+            font-weight: bold;
         }
         .button {
-            background-color: #0066cc;
+            background-color: #4CAF50;
             color: #fff;
-            padding: 20px 45px;
+            padding: 16px 40px;
             border: none;
-            font-size: 20px;
+            font-size: 18px;
             border-radius: 8px;
             cursor: pointer;
-            box-shadow: 0 10px 20px rgba(0, 102, 204, 0.2);
-            transition: all 0.3s ease-in-out;
-            display: inline-flex;
-            align-items: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s, transform 0.2s;
         }
         .button:hover {
-            background-color: #005bb5;
-            transform: translateY(-3px);
-            box-shadow: 0 15px 25px rgba(0, 102, 204, 0.2);
+            background-color: #45a049;
+            transform: scale(1.05);
         }
         .button:active {
-            transform: translateY(2px);
-            box-shadow: 0 5px 15px rgba(0, 102, 204, 0.2);
-        }
-        .button i {
-            margin-right: 10px;
+            transform: scale(0.98);
         }
         #map {
-            height: 450px;
-            margin-top: 40px;
+            height: 400px;
+            margin-top: 20px;
             border-radius: 12px;
             transition: all 0.3s ease;
         }
         .info-box {
-            background-color: #ffffff;
-            padding: 30px;
-            margin-top: 40px;
-            border-radius: 12px;
-            border: 1px solid #e0e0e0;
-            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
+            background-color: #fafafa;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
         .info-box p {
-            margin: 15px 0;
+            margin: 10px 0;
             font-size: 18px;
-            color: #333333;
         }
         .info-box p span {
-            font-weight: 600;
-            color: #0066cc;
+            font-weight: bold;
+            color: #333;
         }
         .loading {
-            font-size: 22px;
-            color: #0066cc;
-            font-weight: 600;
+            font-size: 20px;
+            color: #4CAF50;
+            font-weight: bold;
             animation: blink 1s infinite;
         }
         @keyframes blink {
             50% { opacity: 0.5; }
         }
-
-        /* Responsividade */
-        @media (max-width: 768px) {
-            .container {
-                padding: 25px;
-            }
-            h1 {
-                font-size: 32px;
-            }
-            .button {
-                width: 100%;
-                padding: 18px;
-                font-size: 18px;
-            }
-            #map {
-                height: 350px;
-            }
-        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Localização Premium</h1>
-        <button class="button" onclick="startTracking()"><i class="fas fa-location-arrow"></i> Iniciar Rastreamento</button>
+        <h1>Localização Atualizada</h1>
+        <button class="button" onclick="getLocation()">Obter Localização</button>
         <div id="result" class="loading" style="display:none;">Obtendo localização...</div>
         <div id="map"></div>
         <div id="info-box" class="info-box" style="display:none;">
-            <p><span>Endereço:</span> <span id="address">Aguardando localização...</span></p>
+            <p><span>Latitude:</span> <span id="latitude"></span></p>
+            <p><span>Longitude:</span> <span id="longitude"></span></p>
+            <p><span>Precisão:</span> <span id="accuracy"></span></p>
+            <p><span>Endereço:</span> <span id="address"></span></p>
         </div>
     </div>
 
@@ -143,15 +117,13 @@
         }).addTo(map);
 
         var marker;
-        var watchId;
 
-        function startTracking() {
+        function getLocation() {
             // Exibe a mensagem de carregamento
             document.getElementById('result').style.display = 'block';
 
             if (navigator.geolocation) {
-                // Inicia o rastreamento da posição
-                watchId = navigator.geolocation.watchPosition(updatePosition, showError, {
+                navigator.geolocation.getCurrentPosition(showPosition, showError, {
                     enableHighAccuracy: true, 
                     timeout: 10000,
                     maximumAge: 0
@@ -161,26 +133,31 @@
             }
         }
 
-        function updatePosition(position) {
+        function showPosition(position) {
             var lat = position.coords.latitude;
             var lon = position.coords.longitude;
+            var accuracy = position.coords.accuracy;
 
             // Atualiza o mapa e o marcador
             if (marker) {
-                marker.setLatLng([lat, lon]);
-            } else {
-                marker = L.marker([lat, lon]).addTo(map);
+                map.removeLayer(marker);
             }
+            marker = L.marker([lat, lon]).addTo(map);
             map.setView([lat, lon], 13);
 
+            // Atualiza as informações no painel
+            document.getElementById('latitude').innerText = lat;
+            document.getElementById('longitude').innerText = lon;
+            document.getElementById('accuracy').innerText = accuracy + ' metros';
+
             // Requisição para obter o endereço
-            fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
+            fetch(https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json)
                 .then(response => response.json())
                 .then(data => {
                     if (data.display_name) {
                         document.getElementById('address').innerText = data.display_name;
                     } else {
-                        document.getElementById('address').innerText = 'Endereço não disponível';
+                        document.getElementById('address').innerText = 'Não disponível';
                     }
                 })
                 .catch(error => {
