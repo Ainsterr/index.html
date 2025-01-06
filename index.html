@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Localização com Pontos de Interesse</title>
+    <title>Localização Avançada</title>
 
     <!-- Incluir Leaflet CSS e JS para o Mapa -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
@@ -12,6 +12,7 @@
     <!-- Fontes do Google Fonts para uma interface mais moderna -->
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 
+    <!-- Estilos Personalizados -->
     <style>
         * {
             box-sizing: border-box;
@@ -36,11 +37,37 @@
             padding: 20px;
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
             text-align: center;
+            overflow: hidden;
+        }
+        h1 {
+            font-size: 32px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .button {
+            background-color: #4CAF50;
+            color: #fff;
+            padding: 16px 40px;
+            border: none;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        .button:hover {
+            background-color: #45a049;
+            transform: scale(1.05);
+        }
+        .button:active {
+            transform: scale(0.98);
         }
         #map {
             height: 400px;
             margin-top: 20px;
             border-radius: 12px;
+            transition: all 0.3s ease;
         }
         .info-box {
             background-color: #fafafa;
@@ -48,6 +75,15 @@
             margin-top: 20px;
             border-radius: 10px;
             border: 1px solid #ddd;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .info-box p {
+            margin: 10px 0;
+            font-size: 18px;
+        }
+        .info-box p span {
+            font-weight: bold;
+            color: #333;
         }
         .loading {
             font-size: 20px;
@@ -62,14 +98,15 @@
 </head>
 <body>
     <div class="container">
-        <h1>Localização e Pontos de Interesse</h1>
-        <button onclick="getLocation()">Obter Localização</button>
+        <h1>Localização Atualizada</h1>
+        <button class="button" onclick="getLocation()">Obter Localização</button>
         <div id="result" class="loading" style="display:none;">Obtendo localização...</div>
         <div id="map"></div>
         <div id="info-box" class="info-box" style="display:none;">
             <p><span>Latitude:</span> <span id="latitude"></span></p>
             <p><span>Longitude:</span> <span id="longitude"></span></p>
             <p><span>Precisão:</span> <span id="accuracy"></span></p>
+            <p><span>Endereço:</span> <span id="address"></span></p>
         </div>
     </div>
 
@@ -80,9 +117,9 @@
         }).addTo(map);
 
         var marker;
-        const apiKey = 'SUA_CHAVE_DE_API_GOOGLE'; // Substitua pela sua chave de API do Google
 
         function getLocation() {
+            // Exibe a mensagem de carregamento
             document.getElementById('result').style.display = 'block';
 
             if (navigator.geolocation) {
@@ -113,8 +150,19 @@
             document.getElementById('longitude').innerText = lon;
             document.getElementById('accuracy').innerText = accuracy + ' metros';
 
-            // Exibe os pontos de interesse
-            fetchPlaces(lat, lon);
+            // Requisição para obter o endereço
+            fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.display_name) {
+                        document.getElementById('address').innerText = data.display_name;
+                    } else {
+                        document.getElementById('address').innerText = 'Não disponível';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('address').innerText = 'Erro ao obter endereço';
+                });
 
             // Exibe as informações
             document.getElementById('info-box').style.display = 'block';
@@ -129,33 +177,6 @@
             } else {
                 alert('Falha ao obter localização.');
             }
-        }
-
-        // Função para buscar pontos de interesse próximos
-        function fetchPlaces(lat, lon) {
-            var url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lon}&radius=1000&type=restaurant&key=${apiKey}`;
-
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.results) {
-                        data.results.forEach(place => {
-                            var placeLat = place.geometry.location.lat;
-                            var placeLng = place.geometry.location.lng;
-                            var placeName = place.name;
-                            var placeVicinity = place.vicinity;
-
-                            // Adiciona marcadores para os pontos de interesse
-                            L.marker([placeLat, placeLng]).addTo(map)
-                                .bindPopup(`<b>${placeName}</b><br>${placeVicinity}`);
-                        });
-                    } else {
-                        alert('Nenhum ponto de interesse encontrado.');
-                    }
-                })
-                .catch(error => {
-                    console.error('Erro ao buscar pontos de interesse:', error);
-                });
         }
     </script>
 </body>
