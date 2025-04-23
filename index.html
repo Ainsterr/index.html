@@ -5,8 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Permissions-Policy" content="geolocation=(self)">
   <title>QRX - Botão de Emergência</title>
+  
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -62,7 +65,7 @@
         return;
       }
 
-      navigator.geolocation.watchPosition(
+      navigator.geolocation.getCurrentPosition(
         pos => {
           latitude = pos.coords.latitude;
           longitude = pos.coords.longitude;
