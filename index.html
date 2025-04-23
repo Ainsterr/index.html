@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>QRX - Botão de Emergência</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+</head>
+<body>
+    <h1>Botão de Emergência</h1>
+    <p id="status">Obtendo localização...</p>
+    <button onclick="enviarEmergencia()">🚨 ENVIAR EMERGÊNCIA</button>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyB_pi-9WQuMmnScKzZGuzxl9eGZcjcwLpY",
+            authDomain: "qrxnarede-f06cf.firebaseapp.com",
+            databaseURL: "https://qrxnarede-f06cf-default-rtdb.firebaseio.com",
+            projectId: "qrxnarede-f06cf",
+            storageBucket: "qrxnarede-f06cf.appspot.com",
+            messagingSenderId: "176614952057",
+            appId: "1:176614952057:web:1f9bfccc87e1b5edf058a8",
+            measurementId: "G-RGHY28QY8Q"
+        };
+
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let latitude = null;
+        let longitude = null;
+
+        navigator.geolocation.getCurrentPosition(pos => {
+            latitude = pos.coords.latitude;
+            longitude = pos.coords.longitude;
+            document.getElementById('status').innerText = `Localização pronta: ${latitude}, ${longitude}`;
+        }, err => {
+            document.getElementById('status').innerText = "Erro ao obter localização.";
+        });
+
+        function enviarEmergencia() {
+            if (!latitude || !longitude) {
+                alert("Localização ainda não disponível.");
+                return;
+            }
+
+            const deviceId = 'device_' + Math.floor(Math.random() * 10000); // ou use um ID fixo se preferir
+            const data = {
+                latitude,
+                longitude,
+                emergency: true,
+                last_update: new Date().toISOString()
+            };
+
+            firebase.database().ref('devices/' + deviceId).set(data);
+            alert("Emergência enviada!");
+        }
+    </script>
+</body>
+</html>
