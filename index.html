@@ -1,374 +1,474 @@
 <?php
-// Inicializar sessão e configurações
-session_start();
-require_once 'functions.php';
+// index.php (versão corrigida)
+// Simples backend para armazenar localizações em data.json
+// Demo: não use em produção sem autenticação/validações adicionais.
 
-// Verificar autenticação
-if (!isset($_SESSION['user']) || !isset($_SESSION['sessionId'])) {
-    header('Location: login.php');
-    exit;
+$dataFile = __DIR__ . '/data.json';
+
+if (!file_exists($dataFile)) {
+    file_put_contents($dataFile, json_encode([]));
 }
 
-// Verificar se a sessão ainda é válida
-if (!isSessionValid($_SESSION['sessionId'])) {
-    // Sessão foi encerrada em outro dispositivo
-    session_destroy();
-    header('Location: login.php?session_expired=1');
-    exit;
+function read_db($path) {
+    $raw = @file_get_contents($path);
+    $arr = json_decode($raw, true);
+    return is_array($arr) ? $arr : [];
 }
 
-// Verificar se o acesso expirou
-$user = $_SESSION['user'];
-if (!$user['isAdmin'] && strtotime($user['expiresAt']) < time()) {
-    if (isset($_SESSION['sessionId'])) {
-        removeSession($_SESSION['sessionId']);
-    }
-    session_destroy();
-    header('Location: login.php?expired=1');
-    exit;
+function write_db($path, $data) {
+    $fp = fopen($path, 'c+');
+    if (!$fp) return false;
+    flock($fp, LOCK_EX);
+    ftruncate($fp, 0);
+    rewind($fp);
+    fwrite($fp, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+    fflush($fp);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    return true;
 }
 
-// Obter URL do site de vídeos
-$config = getConfig();
-$videoSiteUrl = $config['videoSiteUrl'] ?? 'https://seu-site-de-videos.com';
-$sessionCheckInterval = $config['sessionCheckInterval'] ?? 5; // Intervalo em segundos para verificar a sessão
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $action = $_POST['action'];
 
-// Calcular tempo restante
-$timeLeft = '';
-if (!$user['isAdmin'] && isset($user['expiresAt'])) {
-    $expiryTime = strtotime($user['expiresAt']);
-    $now = time();
-    $diff = $expiryTime - $now;
-    
-    if ($diff > 0) {
-        $days = floor($diff / (60 * 60 * 24));
-        $hours = floor(($diff % (60 * 60 * 24)) / (60 * 60));
-        $minutes = floor(($diff % (60 * 60)) / 60);
-        
-        if ($days > 0) {
-            $timeLeft = "$days dias";
-        } elseif ($hours > 0) {
-            $timeLeft = "$hours horas";
-        } else {
-            $timeLeft = "$minutes minutos";
+    if ($action === 'update_location') {
+        $user_id = isset($_POST['user_id']) ? trim($_POST['user_id']) : null;
+        $lat = isset($_POST['lat']) ? (float)$_POST['lat'] : null;
+        $lng = isset($_POST['lng']) ? (float)$_POST['lng'] : null;
+        $enabled = isset($_POST['enabled']) ? (int)$_POST['enabled'] : 0;
+
+        if (!$user_id) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'msg' => 'user_id ausente']);
+            exit;
         }
+
+        $db = read_db($dataFile);
+
+        $found = false;
+        foreach ($db as &$entry) {
+            if ($entry['user_id'] === $user_id) {
+                $entry['enabled'] = $enabled ? 1 : 0;
+                if ($enabled && $lat !== null && $lng !== null) {
+                    $entry['lat'] = $lat;
+                    $entry['lng'] = $lng;
+                }
+                $entry['last_seen'] = time();
+                $found = true;
+                break;
+            }
+        }
+        unset($entry);
+
+        if (!$found) {
+            $db[] = [
+                'user_id' => $user_id,
+                'lat' => $lat,
+                'lng' => $lng,
+                'enabled' => $enabled ? 1 : 0,
+                'created_at' => time(),
+                'last_seen' => time()
+            ];
+        }
+
+        $ok = write_db($dataFile, $db);
+        echo json_encode(['ok' => $ok]);
+        exit;
     }
-}
 
-// Obter informações da sessão atual
-$userSessions = getUserSessions($user['id']);
-$currentSession = null;
-foreach ($userSessions as $session) {
-    if ($session['sessionId'] === $_SESSION['sessionId']) {
-        $currentSession = $session;
-        break;
+    if ($action === 'get_data') {
+        $db = read_db($dataFile);
+        echo json_encode(['ok' => true, 'data' => $db]);
+        exit;
     }
+
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'msg' => 'ação desconhecida']);
+    exit;
 }
 
-// Obter informações do dispositivo atual
-$deviceInfo = '';
-if ($currentSession) {
-    $deviceInfo = getDeviceInfo($currentSession['userAgent']);
-}
+$isAdmin = isset($_GET['admin']) && ($_GET['admin'] === '1' || $_GET['admin'] === 'true');
 
-// Atualizar o timestamp da sessão para indicar atividade
-updateSessionTimestamp($_SESSION['sessionId']);
 ?>
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portal de Vídeos</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* Reset e estilos gerais */
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f5f5f5;
-            height: 100vh;
-            overflow: hidden;
-        }
-        
-        /* Layout principal */
-        .app-container {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-        }
-        
-        /* Barra superior */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background-color: #1a1a2e;
-            color: white;
-            padding: 0 20px;
-            height: 60px;
-            z-index: 10;
-        }
-        
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 600;
-            font-size: 16px;
-        }
-        
-        .logo i {
-            font-size: 20px;
-            color: #4f46e5;
-        }
-        
-        .user-controls {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        
-        .expiration-info {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 13px;
-            background-color: rgba(255, 255, 255, 0.1);
-            padding: 4px 10px;
-            border-radius: 4px;
-        }
-        
-        .device-info {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 13px;
-            background-color: rgba(255, 255, 255, 0.1);
-            padding: 4px 10px;
-            border-radius: 4px;
-        }
-        
-        .top-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            background-color: #4f46e5;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-        }
-        
-        .top-button:hover {
-            background-color: #4338ca;
-        }
-        
-        /* Área de conteúdo */
-        .content-container {
-            flex: 1;
-            position: relative;
-            height: calc(100vh - 60px);
-            overflow: hidden;
-            background-color: #f5f5f5;
-        }
-        
-        .video-frame {
-            width: 100%;
-            height: 100%;
-            border: none;
-            display: block;
-        }
-        
-        /* Loading overlay */
-        .loading-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #1a1a2e;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 100;
-            color: white;
-        }
-        
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 5px solid rgba(255, 255, 255, 0.2);
-            border-top: 5px solid #4f46e5;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        /* Responsividade */
-        @media (max-width: 768px) {
-            .user-controls {
-                flex-wrap: wrap;
-                justify-content: flex-end;
-            }
-            
-            .logo span {
-                display: none;
-            }
-            
-            .expiration-info span, .device-info span {
-                display: none;
-            }
-        }
-        
-        @media (max-width: 600px) {
-            .user-controls {
-                gap: 5px;
-            }
-            
-            .top-button {
-                padding: 4px 8px;
-                font-size: 12px;
-            }
-        }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title><?php echo $isAdmin ? 'Admin - Visualizador de Localizações' : 'App de Localização - Usuário'; ?></title>
+
+<style>
+:root{--bg:#0b0f12;--panel:#071217;--accent:#00ff6a;--muted:#7f8c8d;}
+*{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+body{margin:0;background:linear-gradient(180deg,#030405 0%, #07121a 100%);color:#cfece1;min-height:100vh;}
+.container{padding:20px;max-width:1100px;margin:0 auto;}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
+.brand{font-weight:700;letter-spacing:1px;color:var(--accent);}
+.card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,0.5);}
+.btn{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:10px 14px;border-radius:8px;color:var(--accent);cursor:pointer;}
+.btn:hover{filter:brightness(1.1);}
+.user-panel{display:flex;gap:16px;align-items:flex-start;}
+.left{flex:1;}
+.right{width:420px;}
+.toggle{display:flex;align-items:center;gap:12px;margin-top:12px;}
+.switch{width:56px;height:32px;background:rgba(255,255,255,0.05);border-radius:999px;position:relative;cursor:pointer;padding:4px;}
+.knob{width:24px;height:24px;background:white;border-radius:999px;position:absolute;left:4px;top:4px;transition:all .18s;}
+.switch.on{background:linear-gradient(90deg,#004d22,#00ff6a);}
+.switch.on .knob{left:28px;background:#001f10;}
+.small{font-size:13px;color:var(--muted);}
+.hacker-screen{background:#000;color:#0f0;padding:18px;border-radius:10px;font-family:monospace;height:60vh;overflow:auto;box-shadow:0 8px 30px rgba(0,0,0,0.6);}
+.table{width:100%;border-collapse:collapse;}
+.table th,.table td{padding:8px;border-bottom:1px dashed rgba(255,255,255,0.03);text-align:left;font-size:13px;}
+.row-green{color:var(--accent);}
+.map-box{height:280px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.04);}
+@media(max-width:900px){.user-panel{flex-direction:column}.right{width:100%}}
+</style>
+
+<!-- Leaflet CDN (opcional). Mesmo se bloqueado, a app continuará funcional. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 </head>
 <body>
-    <div class="app-container">
-        <!-- Barra superior -->
-        <div class="top-bar">
-            <div class="logo">
-                <i class="fas fa-play-circle"></i>
-                <span>MeteFlix</span>
+<div class="container">
+  <div class="header">
+    <div>
+      <div class="brand"><?php echo $isAdmin ? 'ADMIN • TRACKER' : 'APP • Tracker Simples'; ?></div>
+      <div class="small"><?php echo $isAdmin ? 'Interface administrativa — visualização em tempo real' : 'Tela do usuário — ative/desative a localização'; ?></div>
+    </div>
+    <div>
+      <?php if ($isAdmin): ?>
+        <a href="index.php" class="btn">Abrir como Usuário</a>
+      <?php else: ?>
+        <a href="index.php?admin=1" class="btn">Abrir Admin</a>
+      <?php endif; ?>
+    </div>
+  </div>
+
+<?php if (!$isAdmin): ?>
+
+  <!-- TELA USUÁRIO -->
+  <div class="card user-panel">
+    <div class="left">
+      <h2>Compartilhar minha localização</h2>
+      <p class="small">Clique em ativar para enviar sua posição (navegador pedirá permissão). Os dados são enviados para o servidor e podem ser visualizados na tela admin.</p>
+
+      <div style="margin-top:12px;">
+        <div id="status" class="small">Status: <strong id="statusText">desconhecido</strong></div>
+
+        <div style="margin-top:12px;">
+          <div class="toggle">
+            <div id="switch" class="switch" role="button" aria-pressed="false">
+              <div class="knob"></div>
             </div>
-            <div class="user-controls">
-                <?php if (!empty($deviceInfo)): ?>
-                <div class="device-info">
-                    <i class="fas fa-laptop"></i>
-                    <span>Dispositivo:</span> <?php echo $deviceInfo; ?>
-                </div>
-                <?php endif; ?>
-                
-                <?php if (!$user['isAdmin'] && !empty($timeLeft)): ?>
-                <div class="expiration-info">
-                    <i class="fas fa-clock"></i>
-                    <span>Acesso restante:</span> <?php echo $timeLeft; ?>
-                </div>
-                <?php endif; ?>
-                
-                <?php if ($user['isAdmin']): ?>
-                <a href="admin.php" class="top-button">
-                    <i class="fas fa-cog"></i> Painel Admin
-                </a>
-                <?php endif; ?>
-                
-                <a href="login.php?logout=1" class="top-button">
-                    <i class="fas fa-sign-out-alt"></i> Sair
-                </a>
+            <div>
+              <div><strong id="toggleLabel">Localização: desligada</strong></div>
+              <div class="small">Seu ID: <span id="userId" style="font-family:monospace"></span></div>
             </div>
+          </div>
         </div>
-        
-        <!-- Container do iframe -->
-        <div class="content-container">
-            <div class="loading-overlay" id="loading">
-                <div class="spinner"></div>
-                <p>Carregando seu conteúdo...</p>
-            </div>
-            <iframe src="<?php echo htmlspecialchars($videoSiteUrl); ?>" class="video-frame" id="videoFrame" frameborder="0" allowfullscreen></iframe>
+
+        <div style="margin-top:14px;">
+          <button id="sendNow" class="btn">Enviar posição agora</button>
         </div>
+
+      </div>
     </div>
 
-    <script>
-        // Esconder overlay quando o iframe carregar
-        document.getElementById('videoFrame').onload = function() {
-            document.getElementById('loading').style.display = 'none';
-        };
-        
-        // Fallback se o onload não disparar
-        setTimeout(function() {
-            document.getElementById('loading').style.display = 'none';
-        }, 5000);
-        
-        // Ajustar tamanho do iframe para ocupar todo o espaço disponível
-        function resizeIframe() {
-            const topBar = document.querySelector('.top-bar');
-            const contentContainer = document.querySelector('.content-container');
-            const iframe = document.getElementById('videoFrame');
-            
-            if (topBar && contentContainer && iframe) {
-                const topBarHeight = topBar.offsetHeight;
-                const windowHeight = window.innerHeight;
-                
-                contentContainer.style.height = (windowHeight - topBarHeight) + 'px';
-                iframe.style.width = '100%';
-                iframe.style.height = '90%';
-            }
+    <div class="right">
+      <div class="card" style="padding:10px;">
+        <div class="small">Última posição conhecida:</div>
+        <div id="coords" style="margin-top:8px;font-family:monospace">—</div>
+        <div id="lastSeen" class="small" style="margin-top:6px;color:var(--muted)">—</div>
+      </div>
+
+      <div style="margin-top:12px;" class="card map-box" id="miniMap">
+        <!-- Se Leaflet não estiver disponível, mostramos uma mensagem -->
+        <div id="miniMapFallback" style="padding:12px;font-size:13px;color:var(--muted);">Mapa carregando... (se estiver sem internet, o mapa ficará indisponível)</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+  (function(){
+    // gera/recupera user id no localStorage
+    const LS_KEY = 'simple_tracker_user_id_v1';
+    let userId = localStorage.getItem(LS_KEY);
+    if (!userId) {
+      userId = 'u_' + Math.random().toString(36).slice(2,10);
+      localStorage.setItem(LS_KEY, userId);
+    }
+    document.getElementById('userId').innerText = userId;
+
+    const switchEl = document.getElementById('switch');
+    const toggleLabel = document.getElementById('toggleLabel');
+    const statusText = document.getElementById('statusText');
+    const coordsBox = document.getElementById('coords');
+    const lastSeenBox = document.getElementById('lastSeen');
+    const sendNowBtn = document.getElementById('sendNow');
+
+    // Cria mini mapa só se Leaflet estiver definido (defensivo)
+    let map = (typeof L !== 'undefined') ? L.map('miniMap', {zoomControl:false, attributionControl:false}).setView([0,0], 2) : null;
+    let marker = null;
+    if (map) {
+      try {
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+        // remove fallback text se tiver mapa
+        const fb = document.getElementById('miniMapFallback');
+        if (fb) fb.style.display = 'none';
+      } catch(e){
+        map = null;
+      }
+    }
+
+    let enabled = false;
+    try {
+      enabled = localStorage.getItem('simple_tracker_enabled') === '1';
+    } catch(e){}
+    setSwitch(enabled);
+
+    switchEl.addEventListener('click', function(){
+      enabled = !enabled;
+      setSwitch(enabled);
+      try { localStorage.setItem('simple_tracker_enabled', enabled ? '1' : '0'); } catch(e){}
+      if (enabled) sendPosition();
+      else sendUpdate(null, null, 0);
+    });
+
+    sendNowBtn.addEventListener('click', function(){ sendPosition(true); });
+
+    function setSwitch(on){
+      if(on){
+        switchEl.classList.add('on');
+        toggleLabel.innerText = 'Localização: ativada';
+        statusText.innerText = 'ativo';
+      } else {
+        switchEl.classList.remove('on');
+        toggleLabel.innerText = 'Localização: desligada';
+        statusText.innerText = 'desligado';
+      }
+    }
+
+    function sendUpdate(lat, lng, enabledFlag){
+      const fd = new FormData();
+      fd.append('action', 'update_location');
+      fd.append('user_id', userId);
+      if (lat !== null && lat !== undefined) fd.append('lat', lat);
+      if (lng !== null && lng !== undefined) fd.append('lng', lng);
+      fd.append('enabled', enabledFlag ? 1 : 0);
+
+      fetch('index.php', {method:'POST', body:fd})
+        .then(r=>r.json())
+        .then(j=>{
+          if (j.ok) {
+            statusText.innerText = enabledFlag ? 'ativo (enviado)' : 'desligado (enviado)';
+          } else {
+            statusText.innerText = 'erro ao enviar';
+          }
+        }).catch(()=>statusText.innerText = 'erro');
+    }
+
+    function sendPosition(forced){
+      if (!navigator.geolocation) {
+        statusText.innerText = 'Geolocation não suportada';
+        return;
+      }
+      statusText.innerText = 'capturando...';
+      navigator.geolocation.getCurrentPosition(function(pos){
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        coordsBox.innerText = 'lat: ' + lat.toFixed(6) + ' , lng: ' + lng.toFixed(6);
+        lastSeenBox.innerText = 'Agora';
+        if (map) {
+          try {
+            map.setView([lat,lng], 13);
+            if (!marker) marker = L.marker([lat,lng]).addTo(map);
+            else marker.setLatLng([lat,lng]);
+          } catch(e){}
         }
-        
-        // Executar no carregamento e quando a janela for redimensionada
-        window.addEventListener('load', resizeIframe);
-        window.addEventListener('resize', resizeIframe);
-        
-        // Verificar periodicamente se a sessão ainda é válida
-        let sessionCheckTimer = null;
-        
-        function startSessionCheck() {
-            // Limpar timer existente se houver
-            if (sessionCheckTimer) {
-                clearInterval(sessionCheckTimer);
-            }
-            
-            // Verificar a cada X segundos (definido nas configurações)
-            sessionCheckTimer = setInterval(checkSession, <?php echo $sessionCheckInterval * 1000; ?>);
+        sendUpdate(lat,lng, 1);
+      }, function(err){
+        // códigos comuns: 1 = permissão negada, 2 = posição indisponível, 3 = timeout
+        statusText.innerText = 'perm. negada ou erro';
+      }, {enableHighAccuracy:true, maximumAge:5000, timeout:10000});
+    }
+
+    // se ativado, envia a cada 10s (ajuste se quiser)
+    setInterval(function(){
+      if (localStorage.getItem('simple_tracker_enabled') === '1') {
+        sendPosition();
+      }
+    }, 10000);
+
+    // envia presença quando desligado (útil p/ last_seen)
+    setInterval(function(){
+      if (localStorage.getItem('simple_tracker_enabled') !== '1') {
+        sendUpdate(null,null,0);
+      }
+    }, 30000);
+
+    // envia update inicial ao carregar (mostra no admin rapidamente)
+    // se estiver ativado, envia posição; se não, apenas 'presence'
+    if (localStorage.getItem('simple_tracker_enabled') === '1') {
+      // tentativa de enviar posição imediatamente
+      sendPosition();
+    } else {
+      sendUpdate(null,null,0);
+    }
+
+  })();
+  </script>
+
+<?php else: ?>
+
+  <!-- TELA ADMIN -->
+  <div class="card">
+    <h2>Painel Admin — Visualização em tempo real</h2>
+    <p class="small">Atualização automática a cada 2 segundos. Estilo "hacker".</p>
+
+    <div style="margin-top:12px;display:flex;gap:12px;">
+      <div style="flex:1;">
+        <div class="hacker-screen" id="logWindow">
+          <div id="logContent">Carregando dados...</div>
+        </div>
+      </div>
+      <div style="width:480px;">
+        <div class="card map-box" id="mainMap">
+          <div id="mainMapFallback" style="padding:12px;color:var(--muted)">Mapa carregando...</div>
+        </div>
+        <div style="margin-top:10px;">
+          <table class="table" id="tableUsers">
+            <thead><tr><th>ID</th><th>Coords</th><th>enabled</th><th>last seen</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+  (function(){
+    const logContent = document.getElementById('logContent');
+    const tableBody = document.querySelector('#tableUsers tbody');
+
+    // Cria mapa apenas se Leaflet estiver disponível
+    let map = null;
+    let leafletAvailable = (typeof L !== 'undefined');
+    if (leafletAvailable) {
+      try {
+        map = L.map('mainMap').setView([0,0],2);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+        const fb = document.getElementById('mainMapFallback');
+        if (fb) fb.style.display = 'none';
+      } catch(e){
+        map = null;
+        leafletAvailable = false;
+      }
+    }
+
+    const markers = {};
+
+    function timeago(ts){
+      if (!ts) return '—';
+      const s = Math.floor(Date.now()/1000) - ts;
+      if (s < 5) return 'agora';
+      if (s < 60) return s + 's';
+      if (s < 3600) return Math.floor(s/60) + 'm';
+      return Math.floor(s/3600) + 'h';
+    }
+
+    function refresh(){
+      const fd = new FormData();
+      fd.append('action','get_data');
+      fetch('index.php', {method:'POST', body:fd})
+        .then(r=>r.json())
+        .then(j=>{
+          if (!j.ok) {
+            log('Erro ao buscar dados');
+            return;
+          }
+          const data = j.data || [];
+          renderLog(data);
+          renderTable(data);
+          renderMarkers(data);
+        }).catch(()=>log('Erro de rede'));
+    }
+
+    function renderLog(data){
+      const lines = data.map(e => {
+        const id = e.user_id;
+        const en = e.enabled ? 'ON' : 'OFF';
+        const coord = (e.lat!==null && e.lng!==null) ? `${e.lat.toFixed(5)}, ${e.lng.toFixed(5)}` : '—';
+        const ls = timeago(e.last_seen);
+        return `[${new Date(e.last_seen*1000).toLocaleString()}] ${id} | ${en} | ${coord} | last:${ls}`;
+      }).reverse();
+      logContent.innerHTML = lines.join('<br>');
+    }
+
+    function renderTable(data){
+      tableBody.innerHTML = '';
+      data.forEach(e=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td style="font-family:monospace">${e.user_id}</td>
+          <td>${(e.lat!==null && e.lng!==null)? e.lat.toFixed(5)+', '+e.lng.toFixed(5) : '—'}</td>
+          <td class="${e.enabled? 'row-green' : ''}">${e.enabled? '1' : '0'}</td>
+          <td>${timeago(e.last_seen)}</td>`;
+        tableBody.appendChild(tr);
+      });
+    }
+
+    function renderMarkers(data){
+      const ids = data.map(d=>d.user_id);
+      Object.keys(markers).forEach(k=>{
+        if (!ids.includes(k)) {
+          if (map && markers[k]) map.removeLayer(markers[k]);
+          delete markers[k];
         }
-        
-        function checkSession() {
-            fetch('check_session.php?t=' + new Date().getTime())
-                .then(response => response.json())
-                .then(data => {
-                    if (!data.valid) {
-                        // Redirecionar com base no motivo da invalidação
-                        if (data.reason === 'expired') {
-                            window.location.href = 'login.php?expired=1';
-                        } else {
-                            window.location.href = 'login.php?session_expired=1';
-                        }
-                    }
-                })
-                .catch(error => console.error('Erro ao verificar sessão:', error));
+      });
+
+      data.forEach(e=>{
+        if (e.lat!=null && e.lng!=null && e.enabled && map) {
+          if (!markers[e.user_id]) {
+            markers[e.user_id] = L.circleMarker([e.lat, e.lng], {radius:8}).addTo(map)
+            .bindPopup(`<b>${e.user_id}</b><br>${e.lat.toFixed(5)}, ${e.lng.toFixed(5)}`);
+          } else {
+            markers[e.user_id].setLatLng([e.lat, e.lng]);
+            markers[e.user_id].setPopupContent(`<b>${e.user_id}</b><br>${e.lat.toFixed(5)}, ${e.lng.toFixed(5)}`);
+          }
+        } else {
+          if (markers[e.user_id]) {
+            if (map) map.removeLayer(markers[e.user_id]);
+            delete markers[e.user_id];
+          }
         }
-        
-        // Iniciar verificação de sessão
-        startSessionCheck();
-        
-        // Verificar também quando a página voltar a ficar visível
-        document.addEventListener('visibilitychange', function() {
-            if (document.visibilityState === 'visible') {
-                // Verificar imediatamente quando a página ficar visível
-                checkSession();
-                // Reiniciar o timer
-                startSessionCheck();
-            }
-        });
-    </script>
+      });
+
+      const mkArr = Object.values(markers);
+      if (map && mkArr.length) {
+        try {
+          const group = L.featureGroup(mkArr);
+          map.fitBounds(group.getBounds().pad(0.5));
+        } catch(e){}
+      }
+    }
+
+    function log(msg){
+      const p = document.createElement('div');
+      p.textContent = new Date().toLocaleTimeString() + ' • ' + msg;
+      logContent.prepend(p);
+      while (logContent.childElementCount > 200) logContent.removeChild(logContent.lastChild);
+    }
+
+    refresh();
+    setInterval(refresh, 2000);
+  })();
+  </script>
+
+<?php endif; ?>
+
+</div>
 </body>
 </html>
